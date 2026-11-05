@@ -105,7 +105,7 @@ svg{display:block;min-width:640px;width:100%;height:auto}
 
 <div class="card">
 <div class="row" style="justify-content:space-between"><b>Your progress</b><span class="row"><button id="reset">Reset stats</button><button id="resettime">Reset time</button></span></div>
-<div class="row" style="margin:8px 0"><label>Show <select id="scope"><option value="all">all practice</option><option value="1">one string at a time</option><option value="n">several strings</option></select></label><label>in <select id="smode"><option value="all">all modes</option><option value="name">Name the note</option><option value="find">Find the note</option><option value="listen">Play it (mic)</option></select></label></div>
+<div class="row" style="margin:8px 0"><label>Show <select id="scope"><option value="all">all practice</option><option value="1">one string at a time</option><option value="n">several strings</option></select></label><label>Mode <select id="smode"><option value="all">all modes</option><option value="name">name</option><option value="find">find</option><option value="listen">listen</option><option value="tune">tune</option></select></label></div>
 <div class="msg" id="ptime"></div>
 <div class="msg" id="sum"></div>
 <p class="sub" style="margin:8px 0 6px">Average seconds to get each note right. Green = fast, red = slow, grey = not tried yet.</p>
@@ -162,8 +162,26 @@ function pick(){
 }
 function next(){
   if(!active.size)return;
-  const mc=mode=='listen'||mode=='tune';$('mic').style.display=mc?'':'none';$('tuner').style.display=mode=='tune'?'':'none';$('boardwrap').style.display=mode=='tune'?'none':'';$('hintb').style.display=mode=='listen'?'':'none';
-  q=pick();tried=false;locked=false;
+  const mc=mode=='listen'||mode=='tune';
+  $('mic').style.display=mc?'':'none';
+  $('tuner').style.display=mode=='tune'?'':'none';
+  $('boardwrap').style.display=mode=='tune'?'none':'';
+  $('hintb').style.display=mode=='listen'?'':'none';
+  $('replay').style.display=(mode=='find'||mode=='listen')?'':'none';
+  $('hear').style.display=mode=='listen'?'':'none';
+  $('hear').textContent='';
+  $('hear').className='hear';
+  if(!mc)stopMic();
+  else if(micWanted&&!stream&&!starting)autoMic();
+  stopTone();
+  stopSpeech();
+  q=pick();
+  q.t0=performance.now()+(mode=='listen'?800:0);
+  locked=false;
+  tried=false;
+  drawBoard();
+  $('msg').textContent='';
+  $('msg').className='msg';
   if(mode=='name'){
     dot(q.s,q.f,'var(--acc)');
     $('prompt').textContent='Which note is this?';
@@ -230,7 +248,7 @@ function renderStats(){
     if(v!=null)e.style.background=col(v);
     ss.appendChild(e)});
   const done=H.filter(h=>h.c);
-  $('sum').textContent=H.length?H.length+' answers · '+Math.round(100*H.filter(h=>h.ok).length/H.length)+'% right first try · average '+fmt(tm(H))+' per note'+(done.length>20?' · last 20: '+fmt(tm(done.slice(-20))):''):'No answers recorded yet for this view.';
+  $('sum').textContent=H.length?H.length+' answers · '+Math.round(100*H.filter(h=>h.ok).length/H.length)+'% right first try · average '+fmt(tm(H))+' per note'+(done.length>20?' · last 20: '+fmt(tm(done.slice(-20))):''):'No recorded answers yet';
 }
 // controls
 const sd=$('strs');
