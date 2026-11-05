@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fretboard Trainer</title>
+<style>
+:root{--bg:#faf8f4;--fg:#1f1d1a;--mut:#7a746b;--card:#fff;--line:#ddd6ca;--wood:#e9d9bd;--str:#8a8478;--acc:#c2410c;--ok:#15803d;--bad:#b91c1c;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#17150f;--fg:#f1ece2;--mut:#a39b8c;--card:#221f17;--line:#3a352a;--wood:#2e2719;--str:#a39b8c;--acc:#fb923c;--ok:#4ade80;--bad:#f87171}}
+:root[data-theme="dark"]{--bg:#17150f;--fg:#f1ece2;--mut:#a39b8c;--card:#221f17;--line:#3a352a;--wood:#2e2719;--str:#a39b8c;--acc:#fb923c;--ok:#4ade80;--bad:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:960px;margin:0 auto;padding:20px 16px 40px}
+h1{font:600 22px/1.2 Georgia,serif;margin:0 0 4px}
+.sub{color:var(--mut);margin:0 0 16px;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
+button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+label{font-size:14px;color:var(--mut);display:flex;gap:6px;align-items:center}
+.scroll{overflow-x:auto}
+svg{display:block;min-width:640px;width:100%;height:auto}
+.prompt{font:600 26px/1.3 Georgia,serif;margin:4px 0 10px;min-height:40px}
+.msg{min-height:24px;font-size:15px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.notes{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px}
+.notes button{padding:12px 0;font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;text-align:center;font-size:12px}
+.stats div{border-radius:6px;padding:6px 0;border:1px solid var(--line)}
+.big{display:flex;gap:20px;font-size:14px;color:var(--mut)}.big b{color:var(--fg);font-size:18px}
+.meter{height:6px;background:var(--line);border-radius:3px;margin:10px 0 6px;overflow:hidden}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.f{flex-direction:column;align-items:stretch;gap:4px;color:var(--fg)}.f .t{font-size:14px}.f i{font-style:normal;color:var(--acc);font-weight:600}.f select,.f input[type=range],.f input[type=text]{width:100%}#sayrow input{width:6em}.f input[type=text]{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}.f input[type=range]{accent-color:var(--acc)}.meter i{display:block;height:100%;width:0;background:var(--acc)}
+.stats div b{display:block;font-size:13px}.stats div small{display:block;opacity:.85}
+#ts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:8px 0}#ts div{padding:6px 14px;border:1px solid var(--line);border-radius:8px}#ts div.near{border-color:var(--acc)}#ts div.hit{background:var(--ok);border-color:var(--ok);color:#fff}
+.hear{font:600 40px/1.2 Georgia,serif;min-height:52px;margin:0 0 8px;color:var(--mut)}.hear.ok{color:var(--ok)}
+.cell{fill:transparent;cursor:pointer}.cell:hover{fill:rgba(194,65,12,.15)}
+</style>
+</head>
+<body>
+<main>
+<h1>Fretboard Trainer</h1>
+<p class="sub">Standard tuning (E A D G B E). Learn where every note lives, one string at a time.</p>
+
+<div class="card">
+<div class="row" id="modes">
+<button data-m="name" class="on">Name the note</button>
+<button data-m="find">Find the note</button>
+<button data-m="listen">Play it (mic)</button>
+<button data-m="tune">Tuner</button>
+<button id="gear" aria-expanded="false">⚙ Settings</button>
+<span style="flex:1"></span>
+<label>Frets 0–<select id="maxf"><option>5</option><option>7</option><option selected>12</option><option>22</option><option>24</option></select></label>
+<label><input type="checkbox" id="acc"> Sharps &amp; flats</label>
+</div>
+<div class="row" style="margin-top:10px" id="strs"></div>
+<div id="set" style="display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:14px">
+<div class="grid">
+<label class="f"><span class="t">Audio input</span><select id="dev" aria-label="Audio input"></select></label>
+<label class="f"><span class="t">Channel</span><select id="chan"><option value="mix">Mix (both inputs)</option><option value="0">Input 1 (left)</option><option value="1">Input 2 (right)</option></select></label>
+<label class="f"><span class="t">Input boost: <i id="bv"></i></span><input type="range" id="boost" min="1" max="20" step="0.5"></label>
+<label class="f"><span class="t">Noise gate: <i id="gv"></i></span><input type="range" id="gate" min="1" max="50"></label>
+<label class="f"><span class="t">Pitch tolerance: ±<i id="tv"></i>¢</span><input type="range" id="tol" min="10" max="50"></label>
+<label class="f"><span class="t">Hold time: <i id="hv"></i></span><input type="range" id="hold" min="2" max="10"></label>
+<label class="f"><span class="t">A4 reference: <i id="av"></i> Hz</span><input type="range" id="a4" min="430" max="450"></label>
+<label class="f"><span class="t">Note names</span><select id="flat"><option value="0">Sharps (C♯)</option><option value="1">Flats (D♭)</option></select></label>
+<label class="f"><span class="t">Play the requested note</span><select id="tone"><option value="0">Off</option><option value="1">On (Find and Play modes)</option></select></label>
+<label class="f"><span class="t">Tone length: <i id="dv"></i></span><input type="range" id="dur" min="0.5" max="5" step="0.5"></label>
+<label class="f"><span class="t">Accept in Play mode</span><select id="strict"><option value="1">Only notes on my selected strings &amp; frets</option><option value="0">Right note in any octave</option></select></label>
+<label class="f"><span class="t">Speak the requested note</span><select id="speak"><option value="0">Off</option><option value="1">On (Find and Play modes)</option></select></label>
+<label class="f"><span class="t">Voice</span><select id="voice"></select></label>
+<label class="f"><span class="t">Speaking speed: <i id="rv"></i></span><input type="range" id="rate" min="0.6" max="1.5" step="0.1"></label>
+<label class="f"><span class="t">Note tone volume: <i id="tvv"></i></span><input type="range" id="toneVol" min="0" max="1" step="0.05"></label>
+<label class="f"><span class="t">Voice volume: <i id="vvv"></i></span><input type="range" id="voiceVol" min="0" max="1" step="0.05"></label>
+<div class="f" style="grid-column:1/-1"><span class="t">How the voice says each note (type a spelling, press Enter to hear it)</span><div class="row" id="sayrow"></div></div>
+</div>
+<p class="sub" style="margin:10px 0 8px">Microphone settings apply in “Play it (mic)”. Press Start listening once to load your device list, then pick your interface. Settings are saved in this browser.</p>
+<button id="defaults">Restore defaults</button>
+</div>
+</div>
+
+<div class="card">
+<div class="row" style="justify-content:space-between;align-items:flex-start"><div class="prompt" id="prompt"></div><button id="replay" style="display:none" title="Shortcut: R">🔊 Hear it again</button></div>
+<div class="hear" id="hear"></div>
+<div class="scroll" id="boardwrap"><svg id="fb" viewBox="0 0 880 230" role="img" aria-label="Guitar fretboard"></svg></div>
+<div id="tuner" style="display:none;text-align:center">
+<div id="tn" style="font:600 64px/1.1 Georgia,serif;min-height:70px">–</div>
+<div id="tf" class="sub" style="margin:0">&nbsp;</div>
+<svg id="tm" viewBox="0 0 400 70" style="min-width:0;max-width:440px;margin:8px auto" role="img" aria-label="Tuning meter"></svg>
+<div id="ts"></div>
+<div class="msg" id="tmsg">Press Start listening, then pluck an open string.</div>
+</div>
+<div class="msg" id="msg"></div>
+<div id="mic" style="display:none;margin-top:8px">
+<div class="row"><button id="startmic" class="on">Start listening</button><button id="hintb">Show me where</button></div>
+<div class="meter"><i id="lvl"></i></div>
+<div id="diag" style="font-size:13px;color:var(--mut)"></div>
+<div class="msg" id="rd">Press “Start listening” and allow microphone access. Tune up first, then play one note at a time and let it ring.</div>
+</div>
+<div class="notes" id="notes"></div>
+<div class="big" style="margin-top:12px"><span>Score <b id="sc">0</b></span><span>Streak <b id="st">0</b></span><span>Accuracy <b id="ac">–</b></span></div>
+</div>
+
+<div class="card">
+<div class="row" style="justify-content:space-between"><b>Your progress</b><span class="row"><button id="reset">Reset stats</button><button id="resettime">Reset time</button></span></div>
+<div class="row" style="margin:8px 0"><label>Show <select id="scope"><option value="all">all practice</option><option value="1">one string at a time</option><option value="n">several strings</option></select></label><label>in <select id="smode"><option value="all">all modes</option><option value="name">Name the note</option><option value="find">Find the note</option><option value="listen">Play it (mic)</option></select></label></div>
+<div class="msg" id="ptime"></div>
+<div class="msg" id="sum"></div>
+<p class="sub" style="margin:8px 0 6px">Average seconds to get each note right. Green = fast, red = slow, grey = not tried yet.</p>
+<div class="stats" id="stats"></div>
+<p class="sub" style="margin:12px 0 6px">By string (average time · answers)</p>
+<div class="stats" id="sstats" style="grid-template-columns:repeat(6,1fr)"></div>
+</div>
+</main>
+<script>
+const N=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const OPEN=[4,11,7,2,9,4], SN=['e','B','G','D','A','E'], X0=56, Y0=28, SP=34;
+let FW=68;
+let mode='name', maxF=12, acc=false, active=new Set([0,1,2,3,4,5]);
+let q=null, locked=false, tried=false, score=0, streak=0, hit=0, tot=0, stats={};
+try{stats=JSON.parse(localStorage.getItem('fbstats')||'{}')}catch(e){}
+const $=id=>document.getElementById(id), NS='http://www.w3.org/2000/svg';
+const pc=(s,f)=>(OPEN[s]+f)%12;
+const px=f=>f==0?28:X0+(f-.5)*FW, py=s=>Y0+s*SP;
+function el(t,a,p){const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);(p||$('fb')).appendChild(e);return e}
+
+function drawBoard(){
+  const svg=$('fb');svg.innerHTML='';FW=Math.min(68,820/maxF);
+  const end=X0+maxF*FW;
+  el('rect',{x:X0,y:Y0-14,width:end-X0,height:5*SP+28,fill:'var(--wood)',rx:4});
+  el('rect',{x:X0-4,y:Y0-14,width:6,height:5*SP+28,fill:'var(--fg)'});
+  for(let f=1;f<=maxF;f++){
+    el('line',{x1:X0+f*FW,x2:X0+f*FW,y1:Y0-14,y2:Y0+5*SP+14,stroke:'var(--str)','stroke-width':2});
+    const t=el('text',{x:px(f),y:Y0+5*SP+36,'text-anchor':'middle','font-size':12,fill:'var(--mut)'});t.textContent=f;
+    if([3,5,7,9,12,15,17,19,21,24].includes(f)&&f<=maxF){
+      const m=Y0+2.5*SP;
+      if(f%12==0){el('circle',{cx:px(f),cy:m-SP,r:5,fill:'var(--mut)',opacity:.4});el('circle',{cx:px(f),cy:m+SP,r:5,fill:'var(--mut)',opacity:.4})}
+      else el('circle',{cx:px(f),cy:m,r:5,fill:'var(--mut)',opacity:.4});
+    }
+  }
+  for(let s=0;s<6;s++){
+    el('line',{x1:X0,x2:end,y1:py(s),y2:py(s),stroke:'var(--str)','stroke-width':1+s*.45,opacity:active.has(s)?1:.3});
+    const t=el('text',{x:6,y:py(s)+4,'font-size':13,fill:'var(--mut)'});t.textContent=SN[s];
+  }
+  if(mode=='find')for(const s of active)for(let f=0;f<=maxF;f++){
+    const r=el('rect',{x:f==0?10:X0+(f-1)*FW,y:py(s)-SP/2,width:f==0?36:FW,height:SP,class:'cell'});
+    r.addEventListener('click',()=>clickCell(s,f));
+  }
+}
+function dot(s,f,color,label){
+  el('circle',{cx:px(f),cy:py(s),r:13,fill:color});
+  if(label){const t=el('text',{x:px(f),y:py(s)+4.5,'text-anchor':'middle','font-size':12,'font-weight':700,fill:'#fff'});t.textContent=label}
+}
+function names(){return acc?N:N.filter(n=>n.length==1)}
+function pick(){
+  const ss=[...active];let s,f,n,i=0;
+  do{s=ss[Math.floor(Math.random()*ss.length)];f=Math.floor(Math.random()*(maxF+1));n=pc(s,f);i++}
+  while((!acc&&N[n].length>1||(q&&(q.s==s&&q.f==f||mode=='listen'&&q.n==n)))&&i<200);
+  return{s,f,n};
+}
+function next(){
+  if(!active.size)return;
+  const mc=mode=='listen'||mode=='tune';$('mic').style.display=mc?'':'none';$('tuner').style.display=mode=='tune'?'':'none';$('boardwrap').style.display=mode=='tune'?'none':'';$('hintb').style.display=mode=='tune'?'none':'';$('replay').style.display=(mode=='find'||mode=='listen')?'':'none';$('hear').style.display=mode=='listen'?'':'none';$('hear').textContent='';$('hear').className='hear';if(!mc)stopMic();else if(micWanted&&!stream&&!starting)autoMic();stopTone();stopSpeech();q=pick();q.t0=performance.now()+(mode=='listen'?800:0);locked=false;tried=false;drawBoard();$('msg').textContent='';$('msg').className='msg';
+  if(mode=='name'){
+    dot(q.s,q.f,'var(--acc)');
+    $('prompt').textContent='Which note is this?';
+    $('notes').style.display='';
+  }else{
+    $('prompt').textContent=mode=='tune'?'Tuner — play an open string':mode=='listen'?'Play '+N[q.n]+(FL[q.n]?' / '+FL[q.n]:''):'Find '+N[q.n]+' on the '+SN[q.s]+' string';
+    if(mode=='listen'){coolUntil=performance.now()+800;stable=0;lastPc=-1}
+    $('notes').style.display='none';
+    cue();
+  }
+}
+let hist=[];try{hist=JSON.parse(localStorage.getItem('fbhist')||'[]')}catch(e){}
+function finish(c){
+  if(!q||q.done||q.hint)return;q.done=1;lastAct=performance.now();
+  hist.push({n:q.n,s:q.s,ns:active.size,m:mode,ms:Math.max(0,Math.round(performance.now()-q.t0)),ok:tried?0:1,c:c?1:0,d:Date.now()});
+  if(hist.length>3000)hist.splice(0,hist.length-3000);
+  try{localStorage.setItem('fbhist',JSON.stringify(hist))}catch(e){}
+  renderStats();
+}
+function judge(ok,first){
+  if(first){tot++;if(ok){hit++;score++;streak++}else streak=0}
+  $('sc').textContent=score;$('st').textContent=streak;$('ac').textContent=tot?Math.round(100*hit/tot)+'%':'–';
+}
+function answer(n){
+  if(locked||mode!='name')return;locked=true;
+  const ok=n==q.n;judge(ok,true);tried=!ok;finish(ok);
+  const m=$('msg');
+  if(ok){m.textContent='Correct — '+N[q.n];m.className='msg ok';setTimeout(next,600)}
+  else{m.textContent='Not quite — that’s '+N[q.n]+'.';m.className='msg bad';dot(q.s,q.f,'var(--bad)',N[q.n]);setTimeout(next,1500)}
+}
+function clickCell(s,f){
+  if(locked||mode!='find')return;
+  const ok=s==q.s&&pc(s,f)==q.n, m=$('msg');
+  if(ok){
+    locked=true;judge(true,!tried);finish(true);dot(s,f,'var(--ok)',N[q.n]);m.textContent='Correct!';m.className='msg ok';setTimeout(next,700);
+  }else{
+    judge(false,!tried);tried=true;
+    if(s!=q.s)m.textContent='That’s the '+SN[s]+' string — you need the '+SN[q.s]+' string.';
+    else m.textContent='That fret is '+N[pc(s,f)]+'. Try again.';
+    m.className='msg bad';
+  }
+}
+function buildNotes(){
+  const b=$('notes');b.innerHTML='';
+  N.forEach((n,i)=>{if(!acc&&n.length>1)return;const x=document.createElement('button');x.textContent=n;x.onclick=()=>answer(i);b.appendChild(x)});
+}
+function renderStats(){
+  const sc=$('scope').value,sm=$('smode').value,dark=matchMedia('(prefers-color-scheme:dark)').matches;
+  const H=hist.filter(h=>(sc=='all'||(sc=='1'?h.ns==1:h.ns>1))&&(sm=='all'||h.m==sm));
+  const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null;
+  const tm=g=>avg(g.filter(h=>h.c).map(h=>h.ms/1000));
+  const fmt=v=>v==null?'–':v.toFixed(1)+'s';
+  const col=v=>'hsl('+Math.round(120*(1-Math.min(1,Math.max(0,(v-1)/5))))+',55%,'+(dark?'28%':'80%')+')';
+  const d=$('stats');d.innerHTML='';
+  N.forEach((n,i)=>{
+    const g=H.filter(h=>h.n==i),v=tm(g),e=document.createElement('div');
+    e.innerHTML='<b>'+n+'</b><small>'+fmt(v)+'</small>';
+    if(v!=null){e.style.background=col(v);e.title=g.length+' answers, '+Math.round(100*g.filter(h=>h.ok).length/g.length)+'% right first try'}
+    d.appendChild(e)});
+  const ss=$('sstats');ss.innerHTML='';
+  [5,4,3,2,1,0].forEach(s=>{const n=SN[s];
+    const g=H.filter(h=>h.s==s),v=tm(g),e=document.createElement('div');
+    e.innerHTML='<b>'+(s==0?'e (high)':s==5?'E (low)':n)+'</b><small>'+fmt(v)+(g.length?' · '+g.length:'')+'</small>';
+    if(v!=null)e.style.background=col(v);
+    ss.appendChild(e)});
+  const done=H.filter(h=>h.c);
+  $('sum').textContent=H.length?H.length+' answers · '+Math.round(100*H.filter(h=>h.ok).length/H.length)+'% right first try · average '+fmt(tm(H))+' per note'+(done.length>20?' · last 20: '+fmt(tm(done.slice(-20))):''):'No answers recorded yet for this view.';
+}
+// controls
+const sd=$('strs');
+[5,4,3,2,1,0].forEach(i=>{const b=document.createElement('button');b.textContent=['High E','B','G','D','A','Low E'][i];b.dataset.s=i;b.className='on';
+  b.onclick=()=>{if(active.has(i)){if(active.size>1)active.delete(i)}else active.add(i);b.classList.toggle('on',active.has(i));S.strs=[...active];saveS();next()};sd.appendChild(b)});
+document.querySelectorAll('#modes button[data-m]').forEach(b=>b.onclick=()=>{
+  mode=b.dataset.m;micWanted=(mode=='listen'||mode=='tune');document.querySelectorAll('#modes button[data-m]').forEach(x=>x.classList.toggle('on',x==b));next()});
+$('maxf').onchange=e=>{maxF=+e.target.value;S.maxF=maxF;saveS();next()};
+$('acc').onchange=e=>{acc=e.target.checked;S.acc=acc?1:0;saveS();buildNotes();next()};
+$('reset').onclick=()=>{hist=[];try{localStorage.removeItem('fbhist')}catch(e){}score=streak=hit=tot=0;judge(false,false);renderStats()};
+addEventListener('keydown',e=>{
+  if(mode!='name'||e.target.tagName=='SELECT'||e.target.type=='range'||e.target.type=='text')return;
+  const i='cdefgab'.indexOf(e.key.toLowerCase());if(i<0)return;
+  const base=[0,2,4,5,7,9,11][i];answer(e.shiftKey&&acc?(base+1)%12:base);
+});
+// ---- microphone listening ----
+// ---- settings ----
+const SH=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'],FLT=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+const DEF={devId:'',chan:'mix',boost:1,gate:8,tol:40,hold:4,a4:440,flat:0,tone:0,dur:1.5,strict:1,speak:0,voice:'',rate:1,toneVol:0.7,voiceVol:1,strs:[0,1,2,3,4,5],maxF:12,acc:0,say:{A:'ay',B:'bee',C:'see',D:'dee',E:'ee',F:'eff',G:'gee'}};
+let S=Object.assign({},DEF),FL={},src=null,gainN=null,split=null;
+try{Object.assign(S,JSON.parse(localStorage.getItem('fbset')||'{}'))}catch(e){}
+async function listDevs(){
+  const sel=$('dev');
+  try{
+    const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind=='audioinput');
+    sel.innerHTML='';
+    if(!ds.length){sel.innerHTML='<option value="">No input devices found</option>';return}
+    ds.forEach((d,i)=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||('Audio input '+(i+1)+' (name hidden until the mic is allowed)');sel.appendChild(o)});
+    const cur=stream&&stream.getAudioTracks()[0].getSettings().deviceId;
+    const want=cur||S.devId;if(want&&ds.some(d=>d.deviceId==want))sel.value=want;
+  }catch(e){sel.innerHTML='<option value="">Can’t list devices ('+(e.name||'error')+')</option>'}
+}
+async function diag(){
+  const b=[];
+  let framed=false;try{framed=window.top!==window}catch(e){framed=true}
+  b.push(framed?'Page is inside an embedded frame (microphone is often blocked there).':'Page is in its own tab.');
+  b.push(window.isSecureContext?'Secure context: yes.':'Secure context: NO (microphone unavailable).');
+  b.push(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia?'Microphone API: available.':'Microphone API: NOT available.');
+  try{const p=await navigator.permissions.query({name:'microphone'});b.push('Permission: '+p.state+'.')}catch(e){b.push('Permission: unknown.')}
+  $('diag').textContent=b.join(' ');
+}
+function saveS(){try{localStorage.setItem('fbset',JSON.stringify(S))}catch(e){}}
+function applyNames(){const a=+S.flat?FLT:SH,b=+S.flat?SH:FLT;N.splice(0,12,...a);FL={};[1,3,6,8,10].forEach(i=>FL[i]=b[i])}
+function syncUI(){
+  $('chan').value=S.chan;$('boost').value=S.boost;$('gate').value=S.gate;$('tol').value=S.tol;$('hold').value=S.hold;$('a4').value=S.a4;$('flat').value=String(+S.flat);
+  $('bv').textContent=S.boost+'×';$('gv').textContent=(S.gate/1000).toFixed(3);$('tv').textContent=S.tol;$('hv').textContent=Math.round(S.hold*50)+' ms';$('av').textContent=S.a4;$('tone').value=String(+S.tone);$('dur').value=S.dur;$('dv').textContent=S.dur+' s';$('strict').value=String(+S.strict);$('speak').value=String(+S.speak);$('rate').value=S.rate;$('rv').textContent=(+S.rate).toFixed(1)+'×';if($('voice').options.length)$('voice').value=S.voice||'';syncSay();$('toneVol').value=S.toneVol;$('voiceVol').value=S.voiceVol;$('tvv').textContent=Math.round(S.toneVol*100)+'%';$('vvv').textContent=Math.round(S.voiceVol*100)+'%';
+}
+function route(){
+  if(!src||!gainN||!stream)return;
+  try{src.disconnect()}catch(e){}
+  try{if(split)split.disconnect()}catch(e){}
+  const chs=stream.getAudioTracks()[0].getSettings().channelCount;
+  if(S.chan=='mix'||chs==1){src.connect(gainN)}
+  else{split=ctx.createChannelSplitter(2);src.connect(split);split.connect(gainN,+S.chan)}
+}
+async function openStream(id){
+  const base={channelCount:{ideal:2},echoCancellation:false,noiseSuppression:false,autoGainControl:false};
+  try{return await navigator.mediaDevices.getUserMedia({audio:id?Object.assign({deviceId:{exact:id}},base):base})}
+  catch(e){
+    if(id&&(e.name=='OverconstrainedError'||e.name=='NotFoundError')){S.devId='';saveS();return await navigator.mediaDevices.getUserMedia({audio:base})}
+    throw e;
+  }
+}
+['boost','gate','tol','hold','a4','dur','rate','toneVol','voiceVol'].forEach(k=>$(k).oninput=e=>{S[k]=+e.target.value;if(k=='boost'&&gainN)gainN.gain.value=S.boost;syncUI();saveS()});
+$('chan').onchange=e=>{S.chan=e.target.value;route();saveS()};
+$('flat').onchange=e=>{S.flat=+e.target.value;applyNames();buildNotes();renderStats();saveS();next()};
+$('defaults').onclick=()=>{S=Object.assign({},DEF,{devId:S.devId,strs:S.strs,maxF:S.maxF,acc:S.acc});applyNames();buildNotes();renderStats();syncUI();if(gainN)gainN.gain.value=S.boost;route();saveS();next()};
+$('gear').onclick=()=>{const o=$('set').style.display=='none';if(o){listDevs();diag()}$('set').style.display=o?'':'none';$('gear').setAttribute('aria-expanded',String(o))};
+$('dev').innerHTML='<option value="">Default input (press Start listening to list devices)</option>';
+if(Array.isArray(S.strs)){const a=S.strs.map(Number).filter(i=>i>=0&&i<6);if(a.length)active=new Set(a)}
+maxF=[5,7,12,22,24].includes(+S.maxF)?+S.maxF:12;acc=!!+S.acc;
+$('maxf').value=String(maxF);$('acc').checked=acc;
+[...$('strs').children].forEach(b=>b.classList.toggle('on',active.has(+b.dataset.s)));
+applyNames();syncUI();diag();
+let ctx=null,stream=null,an=null,buf=null,timer=null,stable=0,lastPc=-1,coolUntil=0,ignorePc=-1;
+async function startMic(devId){diag();
+  stopMic();
+  try{
+    stream=await openStream(devId||S.devId);
+  }catch(e){
+    $('rd').textContent='Can’t access the microphone ('+(e.name||'error')+'). If this page is shown inside a preview, open it in its own browser tab and allow microphone access.';
+    return;
+  }
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  try{await ctx.resume()}catch(e){}
+  src=ctx.createMediaStreamSource(stream);
+  gainN=ctx.createGain();gainN.gain.value=S.boost;
+  an=ctx.createAnalyser();an.fftSize=4096;gainN.connect(an);buf=new Float32Array(an.fftSize);
+  route();
+  try{
+    const ds=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind=='audioinput'),sel=$('dev');
+    sel.innerHTML='';
+    ds.forEach(d=>{const o=document.createElement('option');o.value=d.deviceId;o.textContent=d.label||'Audio input';sel.appendChild(o)});
+    const cur=stream.getAudioTracks()[0].getSettings().deviceId;if(cur)sel.value=cur;
+  }catch(e){}
+  $('startmic').textContent='Stop listening';$('rd').textContent='Listening…';
+  timer=setInterval(tick,50);
+}
+function stopMic(){
+  clearInterval(timer);timer=null;an=null;src=gainN=split=null;
+  if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;
+  if(ctx){try{ctx.close()}catch(e){}}ctx=null;
+  $('startmic').textContent='Start listening';
+}
+function yin(b,sr){
+  const W=b.length>>1,maxT=Math.min(W,Math.floor(sr/70)),minT=Math.max(2,Math.floor(sr/1400));
+  const d=new Float32Array(maxT+1),c=new Float32Array(maxT+1);
+  for(let t=1;t<=maxT;t++){let s=0;for(let i=0;i<W;i++){const x=b[i]-b[i+t];s+=x*x}d[t]=s}
+  let run=0;c[0]=1;
+  for(let t=1;t<=maxT;t++){run+=d[t];c[t]=run?d[t]*t/run:1}
+  for(let t=minT;t<maxT;t++){
+    if(c[t]<0.12){
+      while(t+1<maxT&&c[t+1]<c[t])t++;
+      const a=c[t-1],m=c[t],z=c[t+1],den=a-2*m+z,sh=den?0.5*(a-z)/den:0;
+      return sr/(t+sh);
+    }
+  }
+  return -1;
+}
+function tick(){
+  if(!an)return;
+  an.getFloatTimeDomainData(buf);
+  let r=0;for(let i=0;i<buf.length;i++)r+=buf[i]*buf[i];r=Math.sqrt(r/buf.length);
+  $('lvl').style.width=Math.min(100,r*500)+'%';if(r>=S.gate/1000)lastAct=performance.now();
+  if(mode=='tune'){tuneTick(r);return}
+  if(mode!='listen'||!q||locked)return;
+  if(r<S.gate/1000){stable=0;lastPc=-1;ignorePc=-1;$('hear').textContent='…';$('hear').className='hear';return}
+  const f=yin(buf,ctx.sampleRate);
+  if(f<0){stable=0;lastPc=-1;return}
+  const m=12*Math.log2(f/S.a4)+69,nr=Math.round(m),cents=Math.round((m-nr)*100),p=((nr%12)+12)%12;
+  $('hear').textContent='Hearing '+N[p]+(Math.floor(nr/12)-1)+' ('+(cents>0?'+':'')+cents+'¢)';$('hear').className='hear'+(p==q.n&&(!+S.strict||inRange(nr))?' ok':'');
+  if(performance.now()<coolUntil||p==ignorePc||Math.abs(cents)>S.tol){stable=0;return}
+  if(p==lastPc)stable++;else{lastPc=p;stable=1}
+  if(stable<S.hold)return;
+  const mg=$('msg');
+  if(p==q.n&&+S.strict&&!inRange(nr)){
+    mg.textContent='That’s '+N[p]+(Math.floor(nr/12)-1)+', but it’s outside your selected strings and frets.';mg.className='msg bad';
+  }else if(p==q.n){
+    locked=true;judge(true,!tried);finish(true);ignorePc=p;
+    mg.textContent='Yes — that’s '+N[q.n]+'!';mg.className='msg ok';
+    setTimeout(next,900);
+  }else{
+    if(!tried){tried=true;judge(false,true)}
+    mg.textContent='That was '+N[p]+' — keep looking for '+N[q.n]+'.';mg.className='msg bad';
+  }
+}
+// ---- tuner ----
+const TS=[40,45,50,55,59,64],TSN=['E2','A2','D3','G3','B3','E4'];
+let tfr=[],nd=null;
+(function(){
+  const m=$('tm');
+  el('rect',{x:182,y:10,width:36,height:38,rx:4,fill:'var(--ok)',opacity:.22},m);
+  for(let c=-50;c<=50;c+=10){const x=200+3.6*c;el('line',{x1:x,x2:x,y1:c==0?14:24,y2:44,stroke:'var(--str)','stroke-width':c==0?3:2},m)}
+  const a=el('text',{x:20,y:66,'text-anchor':'middle','font-size':16,fill:'var(--mut)'},m);a.textContent='♭';
+  const b=el('text',{x:380,y:66,'text-anchor':'middle','font-size':16,fill:'var(--mut)'},m);b.textContent='♯';
+  nd=el('line',{x1:200,x2:200,y1:8,y2:50,stroke:'var(--acc)','stroke-width':4,'stroke-linecap':'round'},m);
+  TSN.forEach(n=>{const d=document.createElement('div');d.textContent=n;$('ts').appendChild(d)});
+})();
+function setTune(mm,f){
+  const ch=$('ts').children,msg=$('tmsg');
+  if(mm==null){
+    $('tn').textContent='–';$('tf').innerHTML='&nbsp;';
+    nd.setAttribute('x1',200);nd.setAttribute('x2',200);nd.setAttribute('stroke','var(--acc)');
+    msg.textContent='Pluck an open string and let it ring.';msg.className='msg';
+    for(const c of ch)c.className='';
+    return;
+  }
+  const nr=Math.round(mm);let tgt=-1,bd=1e9;
+  TS.forEach((m,i)=>{const d=Math.abs(mm-m);if(d<bd){bd=d;tgt=i}});
+  const near=bd<=2.5,ref=near?TS[tgt]:nr,c=(mm-ref)*100,ci=Math.round(c),ok=Math.abs(c)<=5;
+  const x=200+3.6*Math.max(-50,Math.min(50,c));
+  nd.setAttribute('x1',x);nd.setAttribute('x2',x);nd.setAttribute('stroke',ok?'var(--ok)':'var(--acc)');
+  $('tn').textContent=N[((nr%12)+12)%12]+(Math.floor(nr/12)-1);
+  $('tf').textContent=f.toFixed(1)+' Hz · '+(ci>0?'+':'')+ci+'¢'+(near?' vs '+TSN[tgt]:'');
+  msg.textContent=ok?'In tune ✓':(c<0?'Flat — tighten the string':'Sharp — loosen the string');
+  msg.className='msg'+(ok?' ok':'');
+  TS.forEach((m,i)=>{ch[i].className=near&&i==tgt?(ok?'hit':'near'):''});
+}
+function tuneTick(r){
+  if(r<S.gate/1000){tfr=[];setTune(null);return}
+  const f=yin(buf,ctx.sampleRate);
+  if(f<0)return;
+  tfr.push(f);if(tfr.length>5)tfr.shift();
+  const s=[...tfr].sort((a,b)=>a-b),fm=s[s.length>>1];
+  setTune(12*Math.log2(fm/S.a4)+69,fm);
+}
+$('scope').onchange=$('smode').onchange=()=>renderStats();
+// ---- requested-note tone ----
+const OPENM=[64,59,55,50,45,40];
+let actx=null,toneG=null;
+function stopTone(){
+  if(toneG&&actx){try{toneG.gain.cancelScheduledValues(actx.currentTime);toneG.gain.setTargetAtTime(0,actx.currentTime,0.02)}catch(e){}}
+  toneG=null;
+}
+function playTone(force){
+  stopTone();
+  if(!q||!(mode=='find'||mode=='listen'))return;
+  if(!force&&!+S.tone)return;
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state=='suspended')actx.resume();
+    const fr=S.a4*Math.pow(2,(OPENM[q.s]+q.f-69)/12),t=actx.currentTime+0.02,d=+S.dur;
+    const g=actx.createGain();
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.3*(+S.toneVol),t+0.03);g.gain.setValueAtTime(0.3*(+S.toneVol),t+d);g.gain.linearRampToValueAtTime(0,t+d+0.12);
+    g.connect(actx.destination);toneG=g;
+    [[1,1],[2,.25],[3,.1]].forEach(([k,a])=>{const o=actx.createOscillator(),h=actx.createGain();o.frequency.value=fr*k;h.gain.value=a;o.connect(h);h.connect(g);o.start(t);o.stop(t+d+0.2)});
+    coolUntil=performance.now()+d*1000+400;
+    if(force&&q.t0!=null)q.t0=Math.max(q.t0,performance.now()+d*1000+300);
+  }catch(e){}
+}
+$('replay').onclick=()=>cue(true);
+// ---- spoken requested note ----
+let voices=[],spkTok=0,curU=null;
+function voiceKey(v){return v.name+'|'+v.lang+'|'+v.voiceURI}
+function spokenName(i){
+  const b=N[i],L=b[0],w=(S.say&&S.say[L])||DEF.say[L];
+  return w+b.slice(1).replace('♯',' sharp').replace('♭',' flat');
+}
+const HAS_TTS='speechSynthesis' in window;
+function loadVoices(){
+  const sel=$('voice');
+  if(!HAS_TTS){sel.innerHTML='<option value="">Speech not supported here</option>';return}
+  voices=speechSynthesis.getVoices();
+  sel.innerHTML='<option value="">System default voice</option>';
+  voices.forEach(v=>{const o=document.createElement('option');o.value=voiceKey(v);o.textContent=v.name+' ('+v.lang+')';sel.appendChild(o)});
+  sel.value=S.voice||'';
+}
+function mkUtter(text){
+  const u=new SpeechSynthesisUtterance(text),v=(HAS_TTS?speechSynthesis.getVoices():[]).find(v=>voiceKey(v)==S.voice);curU=u;
+  if(v){u.voice=v;u.lang=v.lang}
+  u.rate=+S.rate||1;u.volume=Math.max(0,Math.min(1,+S.voiceVol));return u;
+}
+function stopSpeech(){spkTok++;try{if(HAS_TTS)speechSynthesis.cancel()}catch(e){}}
+function speakQ(cb){
+  if(!HAS_TTS){cb();return}
+  const nm=N[q.n].replace('♯',' sharp').replace('♭',' flat');
+  const text=spokenName(q.n);
+  const u=mkUtter(text),tok=++spkTok;let fired=false;
+  const end=()=>{if(fired||tok!=spkTok)return;fired=true;cb()};
+  u.onend=end;u.onerror=end;
+  try{speechSynthesis.cancel();setTimeout(()=>{if(tok==spkTok){try{speechSynthesis.speak(u)}catch(e){end()}}},60)}catch(e){end();return}
+  setTimeout(end,12000);
+}
+function cue(force){
+  stopTone();stopSpeech();
+  if(!q||!(mode=='find'||mode=='listen'))return;
+  let sp=+S.speak,tn=+S.tone;
+  if(force&&!sp&&!tn)tn=1;
+  if(!sp&&!tn)return;
+  const qq=q;
+  const after=()=>{
+    if(q!==qq)return;
+    if(tn)playTone(true);
+    else{coolUntil=performance.now()+400;q.t0=Math.max(q.t0,performance.now()+300)}
+  };
+  if(sp){coolUntil=Infinity;speakQ(after)}else after();
+}
+$('speak').onchange=e=>{S.speak=+e.target.value;saveS();if(S.speak)cue(true)};
+$('voice').onchange=e=>{S.voice=e.target.value;saveS();testVoice()};
+if(HAS_TTS)speechSynthesis.onvoiceschanged=loadVoices;
+loadVoices();
+function inRange(m){for(const s of active){const f=m-OPENM[s];if(f>=0&&f<=maxF)return true}return false}
+$('strict').onchange=e=>{S.strict=+e.target.value;saveS()};
+$('tone').onchange=e=>{S.tone=+e.target.value;saveS();if(S.tone)playTone(true)};
+addEventListener('keydown',e=>{
+  if(e.key.toLowerCase()!='r'||e.ctrlKey||e.metaKey||e.altKey)return;
+  if(['SELECT','INPUT','TEXTAREA'].includes(e.target.tagName))return;
+  if(mode=='find'||mode=='listen')cue(true);
+});
+let micWanted=false,starting=false;
+async function autoMic(){if(starting||stream)return;starting=true;try{await startMic()}catch(e){}starting=false;if(!stream)micWanted=false}
+$('startmic').onclick=()=>{if(stream){micWanted=false;stopMic()}else{micWanted=true;autoMic()}};
+// ---- practice time ----
+const dayKey=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+let PT={total:0,days:{}},sess=0,lastAct=performance.now(),ptN=0;
+try{const o=JSON.parse(localStorage.getItem('fbtime')||'null');if(o&&typeof o.total=='number'&&o.days)PT=o}catch(e){}
+function savePT(){try{localStorage.setItem('fbtime',JSON.stringify(PT))}catch(e){}}
+function fmtT(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return h?h+'h '+m+'m':m?m+'m '+(s%60)+'s':s+'s'}
+function renderPT(){$('ptime').textContent='Practice time — this session: '+fmtT(sess)+' · today: '+fmtT(PT.days[dayKey()]||0)+' · total: '+fmtT(PT.total)}
+['pointerdown','keydown'].forEach(ev=>addEventListener(ev,()=>{lastAct=performance.now()},true));
+setInterval(()=>{
+  if(!document.hidden&&mode!='tune'&&performance.now()-lastAct<60000){
+    PT.total++;sess++;const k=dayKey();PT.days[k]=(PT.days[k]||0)+1;
+    if(++ptN%5==0)savePT();
+  }
+  renderPT();
+},1000);
+addEventListener('pagehide',savePT);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)savePT()});
+$('resettime').onclick=()=>{PT={total:0,days:{}};sess=0;savePT();renderPT()};
+renderPT();
+// ---- volume test sounds ----
+function testVoice(){
+  if(!HAS_TTS)return;
+  stopSpeech();const tok=spkTok,u=mkUtter(spokenName(8));
+  setTimeout(()=>{if(tok==spkTok){try{speechSynthesis.speak(u)}catch(e){}}},60);
+}
+function testTone(){
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state=='suspended')actx.resume();
+    stopTone();
+    const t=actx.currentTime+0.02,g=actx.createGain(),v=0.3*(+S.toneVol);
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+0.03);g.gain.setValueAtTime(v,t+0.6);g.gain.linearRampToValueAtTime(0,t+0.72);
+    g.connect(actx.destination);toneG=g;
+    [[1,1],[2,.25],[3,.1]].forEach(([k,a])=>{const o=actx.createOscillator(),h=actx.createGain();o.frequency.value=S.a4*k;h.gain.value=a;o.connect(h);h.connect(g);o.start(t);o.stop(t+0.9)});
+  }catch(e){}
+}
+$('toneVol').onchange=testTone;$('voiceVol').onchange=testVoice;
+function testNote(i){
+  if(!HAS_TTS)return;
+  stopSpeech();const tok=spkTok,u=mkUtter(spokenName(i));
+  setTimeout(()=>{if(tok==spkTok){try{speechSynthesis.speak(u)}catch(e){}}},60);
+}
+function syncSay(){for(const L of 'ABCDEFG'){const e=$('say'+L);if(e)e.value=(S.say&&S.say[L])||DEF.say[L]}}
+(function(){
+  const row=$('sayrow'),PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+  'ABCDEFG'.split('').forEach(L=>{
+    const lab=document.createElement('label'),inp=document.createElement('input');
+    lab.textContent=L+' ';inp.type='text';inp.id='say'+L;inp.maxLength=12;inp.autocomplete='off';
+    inp.onchange=()=>{S.say=Object.assign({},S.say,{[L]:inp.value.trim()||DEF.say[L]});inp.value=S.say[L];saveS();testNote(PC[L])};
+    lab.appendChild(inp);row.appendChild(lab);
+  });
+  syncSay();
+})();
+$('dev').onchange=e=>{S.devId=e.target.value;saveS();startMic()};
+$('hintb').onclick=()=>{
+  if(mode!='listen'||!q)return;
+  tried=true;q.hint=1;drawBoard();
+  for(const s of active)for(let f=0;f<=maxF;f++)if(pc(s,f)==q.n)dot(s,f,'var(--acc)',N[q.n]);
+  $('msg').textContent='Hint shown — play it at any of these spots (no credit this round).';$('msg').className='msg';
+};
+buildNotes();renderStats();next();
+</script>
+</body>
+</html>
