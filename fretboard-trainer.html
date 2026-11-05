@@ -32,7 +32,7 @@ svg{display:block;min-width:640px;width:100%;height:auto}
 .big{display:flex;gap:20px;font-size:14px;color:var(--mut)}.big b{color:var(--fg);font-size:18px}
 .meter{height:6px;background:var(--line);border-radius:3px;margin:10px 0 6px;overflow:hidden}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
-.f{flex-direction:column;align-items:stretch;gap:4px;color:var(--fg)}.f .t{font-size:14px}.f i{font-style:normal;color:var(--acc);font-weight:600}.f select,.f input[type=range],.f input[type=text]{width:100%}#sayrow input{width:6em}.f input[type=text]{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}.f input[type=range]{accent-color:var(--acc)}.meter i{display:block;height:100%;width:0;background:var(--acc)}
+.f{flex-direction:column;align-items:stretch;gap:4px;color:var(--fg)}.f .t{font-size:14px}.f i{font-style:normal;color:var(--acc);font-weight:600}.f select,.f input[type=range],.f input[type=text]{width:100%}.f input[type=text]{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
 .stats div b{display:block;font-size:13px}.stats div small{display:block;opacity:.85}
 #ts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:8px 0}#ts div{padding:6px 14px;border:1px solid var(--line);border-radius:8px}#ts div.near{border-color:var(--acc)}#ts div.hit{background:var(--ok);border-color:var(--ok);color:#fff}
 .hear{font:600 40px/1.2 Georgia,serif;min-height:52px;margin:0 0 8px;color:var(--mut)}.hear.ok{color:var(--ok)}
@@ -162,7 +162,8 @@ function pick(){
 }
 function next(){
   if(!active.size)return;
-  const mc=mode=='listen'||mode=='tune';$('mic').style.display=mc?'':'none';$('tuner').style.display=mode=='tune'?'':'none';$('boardwrap').style.display=mode=='tune'?'none':'';$('hintb').style.display=mode=='tune'?'none':'';$('replay').style.display=(mode=='find'||mode=='listen')?'':'none';$('hear').style.display=mode=='listen'?'':'none';$('hear').textContent='';$('hear').className='hear';if(!mc)stopMic();else if(micWanted&&!stream&&!starting)autoMic();stopTone();stopSpeech();q=pick();q.t0=performance.now()+(mode=='listen'?800:0);locked=false;tried=false;drawBoard();$('msg').textContent='';$('msg').className='msg';
+  const mc=mode=='listen'||mode=='tune';$('mic').style.display=mc?'':'none';$('tuner').style.display=mode=='tune'?'':'none';$('boardwrap').style.display=mode=='tune'?'none':'';$('hintb').style.display=mode=='listen'?'':'none';
+  q=pick();tried=false;locked=false;
   if(mode=='name'){
     dot(q.s,q.f,'var(--acc)');
     $('prompt').textContent='Which note is this?';
@@ -248,7 +249,7 @@ addEventListener('keydown',e=>{
 // ---- microphone listening ----
 // ---- settings ----
 const SH=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'],FLT=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
-const DEF={devId:'',chan:'mix',boost:1,gate:8,tol:40,hold:4,a4:440,flat:0,tone:0,dur:1.5,strict:1,speak:0,voice:'',rate:1,toneVol:0.7,voiceVol:1,strs:[0,1,2,3,4,5],maxF:12,acc:0,say:{A:'ay',B:'bee',C:'see',D:'dee',E:'ee',F:'eff',G:'gee'}};
+const DEF={devId:'',chan:'mix',boost:1,gate:8,tol:40,hold:4,a4:440,flat:0,tone:0,dur:1.5,strict:1,speak:0,voice:'',rate:1,toneVol:0.7,voiceVol:1,strs:[0,1,2,3,4,5],maxF:12,acc:0,say:{A:'ahe',B:'bee',C:'see',D:'dee',E:'ee',F:'eff',G:'gee'}};
 let S=Object.assign({},DEF),FL={},src=null,gainN=null,split=null;
 try{Object.assign(S,JSON.parse(localStorage.getItem('fbset')||'{}'))}catch(e){}
 async function listDevs(){
@@ -275,7 +276,7 @@ function saveS(){try{localStorage.setItem('fbset',JSON.stringify(S))}catch(e){}}
 function applyNames(){const a=+S.flat?FLT:SH,b=+S.flat?SH:FLT;N.splice(0,12,...a);FL={};[1,3,6,8,10].forEach(i=>FL[i]=b[i])}
 function syncUI(){
   $('chan').value=S.chan;$('boost').value=S.boost;$('gate').value=S.gate;$('tol').value=S.tol;$('hold').value=S.hold;$('a4').value=S.a4;$('flat').value=String(+S.flat);
-  $('bv').textContent=S.boost+'×';$('gv').textContent=(S.gate/1000).toFixed(3);$('tv').textContent=S.tol;$('hv').textContent=Math.round(S.hold*50)+' ms';$('av').textContent=S.a4;$('tone').value=String(+S.tone);$('dur').value=S.dur;$('dv').textContent=S.dur+' s';$('strict').value=String(+S.strict);$('speak').value=String(+S.speak);$('rate').value=S.rate;$('rv').textContent=(+S.rate).toFixed(1)+'×';if($('voice').options.length)$('voice').value=S.voice||'';syncSay();$('toneVol').value=S.toneVol;$('voiceVol').value=S.voiceVol;$('tvv').textContent=Math.round(S.toneVol*100)+'%';$('vvv').textContent=Math.round(S.voiceVol*100)+'%';
+  $('bv').textContent=S.boost+'×';$('gv').textContent=(S.gate/1000).toFixed(3);$('tv').textContent=S.tol;$('hv').textContent=Math.round(S.hold*50)+' ms';$('av').textContent=S.a4;$('tone').value=String(+S.tone);$('dur').value=String(S.dur);$('strict').value=String(+S.strict);$('speak').value=String(+S.speak);$('voice').value=S.voice||'';$('rate').value=String(S.rate);$('toneVol').value=String(S.toneVol);$('voiceVol').value=String(S.voiceVol);$('maxf').value=String(maxF);$('acc').checked=acc;
 }
 function route(){
   if(!src||!gainN||!stream)return;
