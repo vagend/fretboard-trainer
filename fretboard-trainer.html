@@ -82,6 +82,13 @@ svg{display:block;min-width:640px;width:100%;height:auto}
 </div>
 
 <div class="card">
+<div class="row" id="runbar" style="margin-bottom:10px">
+<button id="runbtn" class="on">▶ Start</button>
+<label>Game <select id="gmode"><option value="free">Free practice</option><option value="timed">Timed challenge</option></select></label>
+<label id="gdurl">Length <select id="gdur"><option value="1">1 min</option><option value="2">2 min</option><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="30">30 min</option></select></label>
+<span id="gclock" style="font:600 28px/1 Georgia,serif;margin-left:auto"></span>
+</div>
+<div class="msg" id="gres" style="white-space:pre-line"></div>
 <div class="row" style="justify-content:space-between;align-items:flex-start"><div class="prompt" id="prompt"></div><button id="replay" style="display:none" title="Shortcut: R">🔊 Hear it again</button></div>
 <div class="hear" id="hear"></div>
 <div class="scroll" id="boardwrap"><svg id="fb" viewBox="0 0 880 230" role="img" aria-label="Guitar fretboard"></svg></div>
@@ -100,14 +107,15 @@ svg{display:block;min-width:640px;width:100%;height:auto}
 <div class="msg" id="rd">Press “Start listening” and allow microphone access. Tune up first, then play one note at a time and let it ring.</div>
 </div>
 <div class="notes" id="notes"></div>
-<div class="big" style="margin-top:12px"><span>Score <b id="sc">0</b></span><span>Streak <b id="st">0</b></span><span>Accuracy <b id="ac">–</b></span></div>
+<div class="big" style="margin-top:12px"><span>Score <b id="sc">0</b></span><span>Streak <b id="st">0</b></span><span>Accuracy <b id="ac">–</b></span><span>Missed <b id="ms">0</b></span><span>Best streak <b id="bs">0</b></span></div>
 </div>
 
 <div class="card">
-<div class="row" style="justify-content:space-between"><b>Your progress</b><span class="row"><button id="reset">Reset stats</button><button id="resettime">Reset time</button></span></div>
+<div class="row" style="justify-content:space-between"><b>Your progress</b><span class="row"><button id="reset">Reset stats</button><button id="resettime">Reset time</button><button id="resetgames">Reset game scores</button></span></div>
 <div class="row" style="margin:8px 0"><label>Show <select id="scope"><option value="all">all practice</option><option value="1">one string at a time</option><option value="n">several strings</option></select></label><label>Mode <select id="smode"><option value="all">all modes</option><option value="name">name</option><option value="find">find</option><option value="listen">listen</option><option value="tune">tune</option></select></label></div>
 <div class="msg" id="ptime"></div>
 <div class="msg" id="sum"></div>
+<div class="msg" id="gbest" style="white-space:pre-line;font-size:13px;color:var(--mut)"></div>
 <p class="sub" style="margin:8px 0 6px">Average seconds to get each note right. Green = fast, red = slow, grey = not tried yet.</p>
 <div class="stats" id="stats"></div>
 <p class="sub" style="margin:12px 0 6px">By string (average time · answers)</p>
@@ -160,21 +168,34 @@ function pick(){
   while((!acc&&N[n].length>1||(q&&(q.s==s&&q.f==f||mode=='listen'&&q.n==n)))&&i<200);
   return{s,f,n};
 }
+let running=false,game=null,bestStreak=0;
 function next(){
   if(!active.size)return;
+  renderGames();
   const mc=mode=='listen'||mode=='tune';
   $('mic').style.display=mc?'':'none';
   $('tuner').style.display=mode=='tune'?'':'none';
   $('boardwrap').style.display=mode=='tune'?'none':'';
   $('hintb').style.display=mode=='listen'?'':'none';
+  $('startmic').style.display=(mode=='tune'||running)?'':'none';
+  $('runbar').style.display=mode=='tune'?'none':'';
+  $('gres').style.display=mode=='tune'?'none':'';
   $('replay').style.display=(mode=='find'||mode=='listen')?'':'none';
   $('hear').style.display=mode=='listen'?'':'none';
   $('hear').textContent='';
   $('hear').className='hear';
-  if(!mc)stopMic();
+  const mcOn=mode=='tune'||(mode=='listen'&&running);
+  if(!mcOn)stopMic();
   else if(micWanted&&!stream&&!starting)autoMic();
   stopTone();
   stopSpeech();
+  if(mode!='tune'&&!running){
+    q=null;locked=false;drawBoard();
+    $('msg').textContent='';$('msg').className='msg';
+    $('prompt').textContent=S.gmode=='timed'?'Press Start — '+S.gdur+'-minute challenge':'Press Start to begin';
+    $('notes').style.display='none';
+    return;
+  }
   q=pick();
   q.t0=performance.now()+(mode=='listen'?800:0);
   locked=false;
@@ -202,18 +223,20 @@ function finish(c){
   renderStats();
 }
 function judge(ok,first){
-  if(first){tot++;if(ok){hit++;score++;streak++}else streak=0}
-  $('sc').textContent=score;$('st').textContent=streak;$('ac').textContent=tot?Math.round(100*hit/tot)+'%':'–';
+  if(first){tot++;if(ok){hit++;score++;streak++;if(streak>bestStreak)bestStreak=streak}else streak=0}
+  const a=Math.floor(1000*hit/tot)/10;
+  $('sc').textContent=score;$('st').textContent=streak;$('ms').textContent=tot-hit;$('bs').textContent=bestStreak;
+  $('ac').textContent=tot?(a==100?'100':a.toFixed(1))+'%':'–';
 }
 function answer(n){
-  if(locked||mode!='name')return;locked=true;
+  if(!running||locked||mode!='name')return;locked=true;
   const ok=n==q.n;judge(ok,true);tried=!ok;finish(ok);
   const m=$('msg');
   if(ok){m.textContent='Correct — '+N[q.n];m.className='msg ok';setTimeout(next,600)}
   else{m.textContent='Not quite — that’s '+N[q.n]+'.';m.className='msg bad';dot(q.s,q.f,'var(--bad)',N[q.n]);setTimeout(next,1500)}
 }
 function clickCell(s,f){
-  if(locked||mode!='find')return;
+  if(!running||locked||mode!='find')return;
   const ok=s==q.s&&pc(s,f)==q.n, m=$('msg');
   if(ok){
     locked=true;judge(true,!tried);finish(true);dot(s,f,'var(--ok)',N[q.n]);m.textContent='Correct!';m.className='msg ok';setTimeout(next,700);
@@ -255,10 +278,10 @@ const sd=$('strs');
 [5,4,3,2,1,0].forEach(i=>{const b=document.createElement('button');b.textContent=['High E','B','G','D','A','Low E'][i];b.dataset.s=i;b.className='on';
   b.onclick=()=>{if(active.has(i)){if(active.size>1)active.delete(i)}else active.add(i);b.classList.toggle('on',active.has(i));S.strs=[...active];saveS();next()};sd.appendChild(b)});
 document.querySelectorAll('#modes button[data-m]').forEach(b=>b.onclick=()=>{
-  mode=b.dataset.m;micWanted=(mode=='listen'||mode=='tune');document.querySelectorAll('#modes button[data-m]').forEach(x=>x.classList.toggle('on',x==b));next()});
+  if(running)stopRun(false);mode=b.dataset.m;micWanted=(mode=='listen'||mode=='tune');document.querySelectorAll('#modes button[data-m]').forEach(x=>x.classList.toggle('on',x==b));next()});
 $('maxf').onchange=e=>{maxF=+e.target.value;S.maxF=maxF;saveS();next()};
 $('acc').onchange=e=>{acc=e.target.checked;S.acc=acc?1:0;saveS();buildNotes();next()};
-$('reset').onclick=()=>{hist=[];try{localStorage.removeItem('fbhist')}catch(e){}score=streak=hit=tot=0;judge(false,false);renderStats()};
+$('reset').onclick=()=>{hist=[];try{localStorage.removeItem('fbhist')}catch(e){}score=streak=hit=tot=bestStreak=0;judge(false,false);renderStats()};
 addEventListener('keydown',e=>{
   if(mode!='name'||e.target.tagName=='SELECT'||e.target.type=='range'||e.target.type=='text')return;
   const i='cdefgab'.indexOf(e.key.toLowerCase());if(i<0)return;
@@ -267,7 +290,7 @@ addEventListener('keydown',e=>{
 // ---- microphone listening ----
 // ---- settings ----
 const SH=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'],FLT=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
-const DEF={devId:'',chan:'mix',boost:1,gate:8,tol:40,hold:4,a4:440,flat:0,tone:0,dur:1.5,strict:1,speak:0,voice:'',rate:1,toneVol:0.7,voiceVol:1,strs:[0,1,2,3,4,5],maxF:12,acc:0,say:{A:'ahe',B:'bee',C:'see',D:'dee',E:'ee',F:'eff',G:'gee'}};
+const DEF={devId:'',chan:'mix',boost:1,gate:8,tol:40,hold:4,a4:440,flat:0,tone:0,dur:1.5,strict:1,speak:0,voice:'',rate:1,toneVol:0.7,voiceVol:1,strs:[0,1,2,3,4,5],maxF:12,acc:0,gmode:'free',gdur:10,say:{A:'ahe',B:'bee',C:'see',D:'dee',E:'ee',F:'eff',G:'gee'}};
 let S=Object.assign({},DEF),FL={},src=null,gainN=null,split=null;
 try{Object.assign(S,JSON.parse(localStorage.getItem('fbset')||'{}'))}catch(e){}
 async function listDevs(){
@@ -315,7 +338,7 @@ async function openStream(id){
 ['boost','gate','tol','hold','a4','dur','rate','toneVol','voiceVol'].forEach(k=>$(k).oninput=e=>{S[k]=+e.target.value;if(k=='boost'&&gainN)gainN.gain.value=S.boost;syncUI();saveS()});
 $('chan').onchange=e=>{S.chan=e.target.value;route();saveS()};
 $('flat').onchange=e=>{S.flat=+e.target.value;applyNames();buildNotes();renderStats();saveS();next()};
-$('defaults').onclick=()=>{S=Object.assign({},DEF,{devId:S.devId,strs:S.strs,maxF:S.maxF,acc:S.acc});applyNames();buildNotes();renderStats();syncUI();if(gainN)gainN.gain.value=S.boost;route();saveS();next()};
+$('defaults').onclick=()=>{S=Object.assign({},DEF,{devId:S.devId,strs:S.strs,maxF:S.maxF,acc:S.acc,gmode:S.gmode,gdur:S.gdur});applyNames();buildNotes();renderStats();syncUI();if(gainN)gainN.gain.value=S.boost;route();saveS();next()};
 $('gear').onclick=()=>{const o=$('set').style.display=='none';if(o){listDevs();diag()}$('set').style.display=o?'':'none';$('gear').setAttribute('aria-expanded',String(o))};
 $('dev').innerHTML='<option value="">Default input (press Start listening to list devices)</option>';
 if(Array.isArray(S.strs)){const a=S.strs.map(Number).filter(i=>i>=0&&i<6);if(a.length)active=new Set(a)}
@@ -374,7 +397,7 @@ function tick(){
   let r=0;for(let i=0;i<buf.length;i++)r+=buf[i]*buf[i];r=Math.sqrt(r/buf.length);
   $('lvl').style.width=Math.min(100,r*500)+'%';if(r>=S.gate/1000)lastAct=performance.now();
   if(mode=='tune'){tuneTick(r);return}
-  if(mode!='listen'||!q||locked)return;
+  if(mode!='listen'||!running||!q||locked)return;
   if(r<S.gate/1000){stable=0;lastPc=-1;ignorePc=-1;$('hear').textContent='…';$('hear').className='hear';return}
   const f=yin(buf,ctx.sampleRate);
   if(f<0){stable=0;lastPc=-1;return}
@@ -530,7 +553,7 @@ function fmtT(s){s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/
 function renderPT(){$('ptime').textContent='Practice time — this session: '+fmtT(sess)+' · today: '+fmtT(PT.days[dayKey()]||0)+' · total: '+fmtT(PT.total)}
 ['pointerdown','keydown'].forEach(ev=>addEventListener(ev,()=>{lastAct=performance.now()},true));
 setInterval(()=>{
-  if(!document.hidden&&mode!='tune'&&performance.now()-lastAct<60000){
+  if(running&&!document.hidden&&performance.now()-lastAct<180000){
     PT.total++;sess++;const k=dayKey();PT.days[k]=(PT.days[k]||0)+1;
     if(++ptN%5==0)savePT();
   }
@@ -540,6 +563,84 @@ addEventListener('pagehide',savePT);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)savePT()});
 $('resettime').onclick=()=>{PT={total:0,days:{}};sess=0;savePT();renderPT()};
 renderPT();
+// ---- run control & timed game ----
+let gTimer=null,runT0=0,games=[];
+try{games=JSON.parse(localStorage.getItem('fbgames')||'[]')}catch(e){}
+const MN={name:'Name the note',find:'Find the note',listen:'Play it (mic)'},STRN=['High E','B','G','D','A','Low E'];
+function cfgLabel(c){return (MN[c.m]||'Tuner')+' · '+(c.dur?c.dur+' min':'free')+' · '+(c.strs.length==6?'all strings':c.strs.slice().sort((a,b)=>b-a).map(i=>STRN[i]).join(', '))+' · frets 0–'+c.maxF+(c.acc?' · sharps/flats':'')}
+function cfgKey(c){return [c.m,c.dur,c.strs.slice().sort((a,b)=>a-b).join(''),c.maxF,c.acc?1:0].join('|')}
+function curCfg(){return{m:mode,dur:S.gmode=='timed'?+S.gdur:0,strs:[...active],maxF,acc:acc?1:0}}
+function fmtClock(ms,up){const s=Math.max(0,up?Math.floor(ms/1000):Math.ceil(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
+function setRunUI(){
+  $('runbtn').textContent=running?'⏹ Stop':'▶ Start';
+  $('runbtn').classList.toggle('on',!running);
+  $('gmode').disabled=running;$('gdur').disabled=running;
+  $('gdurl').style.display=S.gmode=='timed'?'':'none';
+  const lock=!!game;
+  $('maxf').disabled=lock;$('acc').disabled=lock;
+  [...$('strs').children].forEach(b=>{b.disabled=lock});
+}
+function gTick(){
+  if(!running){$('gclock').textContent='';return}
+  const el=performance.now()-runT0;
+  if(game){const left=game.dur-el;$('gclock').textContent=fmtClock(left);if(left<=0)stopRun(true)}
+  else $('gclock').textContent=fmtClock(el,true);
+}
+function startRun(){
+  if(running||mode=='tune')return;
+  running=true;score=streak=hit=tot=bestStreak=0;judge(false,false);
+  $('gres').textContent='';
+  runT0=performance.now();lastAct=runT0;
+  game=S.gmode=='timed'?{dur:(+S.gdur)*60000,cfg:curCfg()}:null;
+  micWanted=(mode=='listen');
+  setRunUI();
+  clearInterval(gTimer);gTimer=setInterval(gTick,200);
+  next();gTick();
+}
+function stopRun(finished){
+  if(!running)return;
+  const g=game,el=performance.now()-runT0;
+  running=false;game=null;clearInterval(gTimer);gTimer=null;
+  stopTone();stopSpeech();setRunUI();$('gclock').textContent='';
+  const missed=tot-hit,a=tot?Math.floor(1000*hit/tot)/10:0,accS=tot?(a==100?'100':a.toFixed(1))+'%':'–';
+  const since=Date.now()-el,mine=hist.filter(h=>h.d>=since&&h.c);
+  const avg=mine.length?mine.reduce((s,h)=>s+h.ms,0)/mine.length/1000:null;
+  const rate=el>0?(hit/(el/60000)).toFixed(1):'0';
+  let txt;
+  if(g&&finished){
+    const key=cfgKey(g.cfg),prev=Math.max(0,...games.filter(x=>cfgKey(x.cfg)==key).map(x=>x.hit));
+    games.push({d:Date.now(),cfg:g.cfg,hit,missed,bs:bestStreak,acc:accS});
+    if(games.length>200)games.splice(0,games.length-200);
+    try{localStorage.setItem('fbgames',JSON.stringify(games))}catch(e){}
+    txt='Time’s up! '+hit+' notes · '+missed+' missed · '+accS+' accurate\n'+rate+' notes per minute'+(avg!=null?' · average '+avg.toFixed(1)+' s per note':'')+' · best streak '+bestStreak+'\n'+(hit>prev?(prev?'🏆 New personal best! (previous: '+prev+')':'🏆 First score for these settings — that’s your benchmark.'):'Personal best for these settings: '+prev);
+  }else if(g){
+    txt='Game stopped early — not recorded. So far: '+hit+' notes, '+missed+' missed.';
+  }else{
+    txt='Stopped after '+fmtClock(el,true)+': '+hit+' notes · '+missed+' missed · '+accS+' accurate'+(avg!=null?' · average '+avg.toFixed(1)+' s per note':'')+'.';
+  }
+  next();
+  $('gres').textContent=txt;
+}
+function renderGames(){
+  const el=$('gbest');
+  if(mode=='tune'){el.textContent='';return}
+  const c=Object.assign(curCfg(),{dur:+S.gdur}),k=cfgKey(c),mine=games.filter(x=>cfgKey(x.cfg)==k);
+  let t=mine.length?'Best for '+cfgLabel(c)+': '+Math.max(...mine.map(x=>x.hit))+' notes ('+mine.length+' game'+(mine.length>1?'s':'')+')':'No timed games yet for: '+cfgLabel(c);
+  const rec=games.slice(-5).reverse().map(x=>new Date(x.d).toLocaleDateString()+' · '+cfgLabel(x.cfg)+' · '+x.hit+' notes ('+x.missed+' missed)');
+  if(rec.length)t+='\nRecent games:\n'+rec.join('\n');
+  el.textContent=t;
+}
+$('gmode').value=S.gmode||'free';$('gdur').value=String(S.gdur||10);
+$('gmode').onchange=e=>{S.gmode=e.target.value;saveS();setRunUI();next()};
+$('gdur').onchange=e=>{S.gdur=+e.target.value;saveS();next()};
+$('runbtn').onclick=()=>{running?stopRun(false):startRun()};
+$('resetgames').onclick=()=>{games=[];try{localStorage.removeItem('fbgames')}catch(e){}renderGames()};
+addEventListener('keydown',e=>{
+  if(e.code!='Space'||e.ctrlKey||e.metaKey||e.altKey||mode=='tune')return;
+  if(['SELECT','INPUT','TEXTAREA','BUTTON'].includes(e.target.tagName))return;
+  e.preventDefault();$('runbtn').click();
+});
+setRunUI();
 // ---- volume test sounds ----
 function testVoice(){
   if(!HAS_TTS)return;
