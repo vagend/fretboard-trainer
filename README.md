@@ -1,5 +1,8 @@
 # fretboard-trainer
 
+A single html file download. Save it and run it locally.
+https://github.com/vagend/fretboard-trainer/releases/download/1.0.0/fretboard-trainer.html
+
 A browser-based guitar fretboard note trainer with microphone listening
 and tuner modes.
 
